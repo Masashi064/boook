@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>みんなの本紹介</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS v2 -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <style>
+    .star { font-size: 18px; line-height: 1; }
+    .star.filled { color: #f59e0b; } /* amber-500 */
+    .badge { padding: 2px 8px; border-radius: 9999px; background: #e5e7eb; font-size: 12px; }
+    .dropdown { position: absolute; z-index: 20; background: white; border: 1px solid #e5e7eb; border-radius: 8px; width: 100%; max-height: 240px; overflow: auto; }
+    .dropdown-item { padding: 8px 10px; cursor: pointer; }
+    .dropdown-item:hover { background: #f3f4f6; }
+    dialog::backdrop { background: rgba(0,0,0,.4); }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div class="max-w-6xl mx-auto p-4 sm:p-6">
+    <header class="mb-6">
+      <h1 class="text-2xl font-bold">📚 みんなの本紹介（簡易版）</h1>
+      <p class="text-sm text-gray-600">ログインなしで登録・閲覧できます</p>
+    </header>
+
+    <!-- 追加フォーム -->
+    <section class="mb-8 bg-white rounded-xl shadow p-4 sm:p-6">
+      <h2 class="font-semibold mb-3">1. おすすめの本を登録</h2>
+      <div class="grid sm:grid-cols-2 gap-4 relative">
+        <div class="sm:col-span-2 relative">
+          <label class="block text-sm mb-1">本のタイトル（必須）</label>
+          <input id="inp-title" class="w-full border rounded-lg p-2" placeholder="例）ウォール街のランダム・ウォーカー" />
+          <div id="suggest-box" class="dropdown hidden mt-1"></div>
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1">カテゴリ（必須）</label>
+          <select id="inp-category" class="w-full border rounded-lg p-2">
+            <option value="">選択してください</option>
+            <option>株式・インデックス</option>
+            <option>不動産</option>
+            <option>FIRE関連</option>
+            <option>FX</option>
+            <option>その他</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1">オススメ度 ★（必須）</label>
+          <select id="inp-rating" class="w-full border rounded-lg p-2">
+            <option value="">選択してください</option>
+            <option value="1">★1</option>
+            <option value="2">★2</option>
+            <option value="3">★3</option>
+            <option value="4">★4</option>
+            <option value="5">★5</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1">著者（任意）</label>
+          <input id="inp-author" class="w-full border rounded-lg p-2" placeholder="著者名" />
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1">URL（任意）</label>
+          <input id="inp-url" class="w-full border rounded-lg p-2" placeholder="Amazon等のリンク" />
+        </div>
+
+        <div class="sm:col-span-2">
+          <label class="block text-sm mb-1">おすすめ理由（任意）</label>
+          <textarea id="inp-reason" class="w-full border rounded-lg p-2" rows="3" placeholder="なぜオススメ？"></textarea>
+        </div>
+
+        <div class="sm:col-span-2">
+          <label class="block text-sm mb-1">あなたの名前（任意・表示用）</label>
+          <input id="inp-name" class="w-full border rounded-lg p-2" placeholder="ニックネーム可" />
+        </div>
+
+        <div class="sm:col-span-2">
+          <button id="btn-submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">登録する</button>
+          <span id="form-msg" class="ml-3 text-sm text-gray-600"></span>
+        </div>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">※ タイトル入力中に「すでにオススメされているかも？」候補を表示します</p>
+    </section>
+
+    <!-- フィルタ・ソート -->
+    <section class="mb-4 flex flex-col sm:flex-row gap-3 sm:items-end">
+      <div>
+        <label class="block text-sm mb-1">カテゴリで絞り込み</label>
+        <select id="filter-category" class="border rounded-lg p-2">
+          <option value="">すべて</option>
+          <option>株式・インデックス</option>
+          <option>不動産</option>
+          <option>FIRE関連</option>
+          <option>FX</option>
+          <option>その他</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm mb-1">並び替え</label>
+        <select id="sort-by" class="border rounded-lg p-2">
+          <option value="score">評価が高い順</option>
+          <option value="new">登録が新しい順</option>
+          <option value="count">投稿数が多い順</option>
+        </select>
+      </div>
+      <div class="sm:ml-auto">
+        <label class="block text-sm mb-1">タイトル検索</label>
+        <input id="search-q" class="border rounded-lg p-2" placeholder="キーワード" />
+      </div>
+    </section>
+
+    <!-- 一覧 -->
+    <section class="bg-white rounded-xl shadow">
+      <div id="list" class="divide-y"></div>
+      <div id="empty" class="p-6 text-center text-gray-500 hidden">該当データがありません</div>
+    </section>
+  </div>
+
+  <!-- 詳細モーダル -->
+  <dialog id="dlg-detail" class="rounded-xl p-0 w-11/12 max-w-2xl">
+    <div class="p-5 border-b flex items-start gap-3">
+      <div class="grow">
+        <h3 id="detail-title" class="text-lg font-semibold"></h3>
+        <div id="detail-meta" class="text-sm text-gray-600"></div>
+      </div>
+      <button onclick="closeDetail()" class="px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200">閉じる</button>
+    </div>
+    <div class="p-5 space-y-4 max-h-[70vh] overflow-auto">
+      <div>
+        <h4 class="font-semibold mb-2">平均オススメ度</h4>
+        <div id="detail-avg" class="flex items-center gap-2"></div>
+      </div>
+      <div>
+        <h4 class="font-semibold mb-2">みんなのおすすめ理由</h4>
+        <ul id="detail-reasons" class="space-y-3"></ul>
+      </div>
+      <div class="text-xs text-gray-500" id="detail-dates"></div>
+            <!-- 追加: この本に評価を足す -->
+      <div class="border-t pt-4">
+        <h4 class="font-semibold mb-2">この本に評価を追加</h4>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm mb-1">オススメ度（必須）</label>
+            <select id="add-rating" class="w-full border rounded-lg p-2">
+              <option value="">選択してください</option>
+              <option value="1">★1</option>
+              <option value="2">★2</option>
+              <option value="3">★3</option>
+              <option value="4">★4</option>
+              <option value="5">★5</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm mb-1">あなたの名前（任意）</label>
+            <input id="add-name" class="w-full border rounded-lg p-2" placeholder="ニックネーム可" />
+          </div>
+          <div>
+            <label class="block text-sm mb-1">URL（任意）</label>
+            <input id="add-url" class="w-full border rounded-lg p-2" placeholder="Amazon等のリンク" />
+          </div>
+          <div>
+            <label class="block text-sm mb-1">カテゴリ（任意・既定は既存カテゴリ）</label>
+            <select id="add-category" class="w-full border rounded-lg p-2">
+              <option value="">（変更しない）</option>
+              <option>株式・インデックス</option>
+              <option>不動産</option>
+              <option>FIRE関連</option>
+              <option>FX</option>
+              <option>その他</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-sm mb-1">おすすめ理由（任意）</label>
+            <textarea id="add-reason" class="w-full border rounded-lg p-2" rows="3" placeholder="なぜオススメ？"></textarea>
+          </div>
+          <div class="sm:col-span-2">
+            <button id="add-submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">この本に評価を追加</button>
+            <span id="add-msg" class="ml-2 text-sm text-gray-600"></span>
+          </div>
+        </div>
+        <!-- 隠し: 現在の本タイトルを保持 -->
+        <input type="hidden" id="current-title" />
+        <input type="hidden" id="current-category" />
+      </div>
+    </div>
+  </dialog>
+
+<script>
+  // ====== 環境変数（置き換え） ======
+  const SUPABASE_URL = "https://ssqbcwhophlmhcxyrkjx.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcWJjd2hvcGhsbWhjeHlya2p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0OTg1ODksImV4cCI6MjA3NTA3NDU4OX0.RFsUcX-NczrHI9mgaMNHLqtIlCVp-0uthELS6L1Hq_w"
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // 便利関数
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const debounce = (fn, ms=300) => {
+    let t; return (...args) => { clearTimeout(t); t=setTimeout(()=>fn(...args), ms); };
+  };
+  const starNode = (n, filled) => {
+    const s=document.createElement('span'); s.textContent='★'; s.className='star'+(filled?' filled':''); return s;
+  };
+  function renderStars(container, score, max=5) {
+    container.innerHTML='';
+    for (let i=1; i<=max; i++) container.appendChild(starNode(i, i<=Math.round(score)));
+    const t=document.createElement('span'); t.className='text-sm text-gray-600 ml-2'; t.textContent = `(${score})`;
+    container.appendChild(t);
+  }
+
+  // ====== サジェスト（重複チェック） ======
+  const titleInput = document.getElementById('inp-title');
+  const suggestBox = document.getElementById('suggest-box');
+
+  async function fetchSuggests(q) {
+    if (!q || q.trim().length < 2) { suggestBox.classList.add('hidden'); suggestBox.innerHTML=''; return; }
+    const { data, error } = await supabase.rpc('suggest_similar_titles', { q, limit_count: 8 });
+    if (error) { console.warn(error); suggestBox.classList.add('hidden'); return; }
+
+    if (!data || data.length === 0) { suggestBox.classList.add('hidden'); suggestBox.innerHTML=''; return; }
+
+    suggestBox.innerHTML = '<div class="px-3 py-2 text-xs text-gray-500">すでにオススメされているかも？</div>'
+      + data.map(d => `<div class="dropdown-item" data-title="${d.title}">${d.title} <span class="text-gray-500">/ ${d.author}</span></div>`).join('');
+    suggestBox.classList.remove('hidden');
+  }
+  titleInput.addEventListener('input', debounce(e => fetchSuggests(e.target.value), 250));
+  suggestBox.addEventListener('click', (e) => {
+    const item = e.target.closest('.dropdown-item');
+    if (!item) return;
+    titleInput.value = item.dataset.title;
+    suggestBox.classList.add('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (!suggestBox.contains(e.target) && e.target !== titleInput) suggestBox.classList.add('hidden');
+  });
+
+  // ====== 登録 ======
+  const msg = document.getElementById('form-msg');
+  document.getElementById('btn-submit').addEventListener('click', async () => {
+    msg.textContent = '';
+    const title = document.getElementById('inp-title').value.trim();
+    const category = document.getElementById('inp-category').value;
+    const rating = Number(document.getElementById('inp-rating').value);
+    const author_raw = document.getElementById('inp-author').value.trim();
+    const url = document.getElementById('inp-url').value.trim();
+    const reason_raw = document.getElementById('inp-reason').value.trim();
+    const name = document.getElementById('inp-name').value.trim();
+    const date_str = new Date().toISOString().slice(0,10);
+
+    if (!title || !category || !rating) {
+      msg.textContent = '必須項目（タイトル／カテゴリ／★）を入力してください。';
+      msg.className = 'ml-3 text-sm text-red-600';
+      return;
+    }
+
+    // 近似タイトルが既にある場合、軽く注意喚起
+    const { data: sugg } = await supabase.rpc('suggest_similar_titles', { q: title, limit_count: 1 });
+    if (sugg && sugg.length) {
+      const s = sugg[0];
+      if (s.levenshtein_dist <= 3 || s.similarity_score >= 0.35) {
+        if (!confirm(`「${s.title}」が既にあります。追加しますか？`)) return;
+      }
+    }
+
+    const { error } = await supabase.from('recommendations').insert([{
+      title, category, rating, author_raw, url, reason_raw, name, date_str
+    }]);
+    if (error) {
+      console.error(error);
+      msg.textContent = '登録に失敗しました。';
+      msg.className = 'ml-3 text-sm text-red-600';
+    } else {
+      msg.textContent = '登録しました！一覧を更新します…';
+      msg.className = 'ml-3 text-sm text-green-700';
+      await sleep(500);
+      resetForm();
+      await loadList();  // 再読込
+    }
+  });
+
+  function resetForm() {
+    ['inp-title','inp-category','inp-rating','inp-author','inp-url','inp-reason','inp-name'].forEach(id=>{
+      const el=document.getElementById(id);
+      if (el.tagName==='SELECT') el.value='';
+      else el.value='';
+    });
+  }
+
+  // ====== 一覧の読み込み ======
+  const listEl = document.getElementById('list');
+  const emptyEl = document.getElementById('empty');
+
+  async function loadList() {
+    const filterCat = document.getElementById('filter-category').value;
+    const sortBy = document.getElementById('sort-by').value;
+    const q = document.getElementById('search-q').value.trim();
+
+    let qb = supabase.from('book_stats').select('*');
+
+    if (filterCat) qb = qb.eq('category', filterCat);
+    if (q) qb = qb.ilike('title', `%${q}%`);
+
+    // 並び替え
+    if (sortBy === 'score') qb = qb.order('avg_rating', { ascending: false }).order('posts_count', { ascending: false });
+    if (sortBy === 'count') qb = qb.order('posts_count', { ascending: false }).order('avg_rating', { ascending: false });
+    if (sortBy === 'new')   qb = qb.order('last_post_at', { ascending: false });
+
+    const { data, error } = await qb;
+    if (error) { console.error(error); listEl.innerHTML=''; emptyEl.classList.remove('hidden'); return; }
+
+    if (!data || data.length===0) { listEl.innerHTML=''; emptyEl.classList.remove('hidden'); return; }
+    emptyEl.classList.add('hidden');
+
+    listEl.innerHTML = data.map(b => {
+      const stars = '★'.repeat(Math.round(b.avg_rating)) + '☆'.repeat(5 - Math.round(b.avg_rating));
+      const dateStr = b.last_post_at ? new Date(b.last_post_at).toLocaleDateString() : '-';
+      return `
+      <div class="p-4 hover:bg-gray-50 cursor-pointer" data-title_key="${b.title_key}">
+        <div class="flex items-start gap-3">
+          <div class="grow">
+            <div class="text-base font-semibold">${escapeHtml(b.title)}</div>
+            <div class="text-sm text-gray-600">著者：${escapeHtml(b.author || '不明')}</div>
+            <div class="mt-1 flex items-center gap-2">
+              <span class="star ${Math.round(b.avg_rating)>=1?'filled':''}">★</span>
+              <span class="star ${Math.round(b.avg_rating)>=2?'filled':''}">★</span>
+              <span class="star ${Math.round(b.avg_rating)>=3?'filled':''}">★</span>
+              <span class="star ${Math.round(b.avg_rating)>=4?'filled':''}">★</span>
+              <span class="star ${Math.round(b.avg_rating)>=5?'filled':''}">★</span>
+              <span class="text-sm text-gray-600">平均${b.avg_rating} / 投稿 ${b.posts_count}</span>
+              <span class="badge">${escapeHtml(b.category || 'その他')}</span>
+            </div>
+          </div>
+          <div class="text-xs text-gray-500 whitespace-nowrap">最終更新: ${dateStr}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  listEl.addEventListener('click', async (e) => {
+    const row = e.target.closest('[data-title_key]');
+    if (!row) return;
+    const key = row.getAttribute('data-title_key');
+    await openDetail(key);
+  });
+
+  // ====== 詳細（モーダル） ======
+  async function openDetail(title_key) {
+    // 代表情報
+    let { data: books } = await supabase.from('book_stats').select('*').eq('title_key', title_key).limit(1);
+    const b = books && books[0];
+    if (!b) return;
+
+    document.getElementById('detail-title').textContent = b.title;
+    document.getElementById('detail-meta').textContent = `著者：${b.author} ／ カテゴリ：${b.category || 'その他'}`;
+
+    const avgWrap = document.getElementById('detail-avg');
+    renderStars(avgWrap, b.avg_rating);
+
+    // レビュー一覧（元テーブルから）
+    const { data: recs } = await supabase
+      .from('recommendations')
+      .select('rating, reason_raw, name, url, date_str')
+      .ilike('title', b.title); // 大文字小文字を気にせず同名を拾う
+
+    const ul = document.getElementById('detail-reasons');
+    ul.innerHTML = (recs||[]).map(r => {
+      const link = r.url ? `<a class="text-blue-600 underline" href="${escapeAttr(r.url)}" target="_blank" rel="noopener">リンク</a>` : '';
+      const who = r.name ? `（by ${escapeHtml(r.name)}）` : '';
+      return `<li class="p-3 rounded-lg border">
+        <div class="mb-1">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
+        <div class="text-sm whitespace-pre-wrap">${escapeHtml(r.reason_raw || '（理由なし）')}</div>
+        <div class="mt-1 text-xs text-gray-500 flex items-center gap-2">
+          <span>${escapeHtml(r.date_str || '')}</span>
+          ${link}
+          <span>${who}</span>
+        </div>
+      </li>`;
+    }).join('');
+
+    const first = b.first_post_at ? new Date(b.first_post_at).toLocaleDateString() : '-';
+    const last  = b.last_post_at ? new Date(b.last_post_at).toLocaleDateString() : '-';
+    document.getElementById('detail-dates').textContent = `登録日: ${first} ／ 最終更新日: ${last}`;
+        // 現在のタイトル/カテゴリをフォームに反映
+    document.getElementById('current-title').value = b.title;
+    document.getElementById('current-category').value = b.category || '';
+    // 既定カテゴリ（変更しない場合は空のまま）
+    const addCatSel = document.getElementById('add-category');
+    if (addCatSel) addCatSel.value = '';
+
+
+    document.getElementById('dlg-detail').showModal();
+  }
+  function closeDetail(){ document.getElementById('dlg-detail').close(); }
+
+  // ====== フィルタ・ソート・検索イベント ======
+  document.getElementById('filter-category').addEventListener('change', loadList);
+  document.getElementById('sort-by').addEventListener('change', loadList);
+  document.getElementById('search-q').addEventListener('input', debounce(loadList, 250));
+  // 詳細フォームから評価を追加
+document.getElementById('add-submit').addEventListener('click', async () => {
+  const msgEl = document.getElementById('add-msg');
+  msgEl.textContent = '';
+  msgEl.className = 'ml-2 text-sm text-gray-600';
+
+  const title = document.getElementById('current-title').value;         // 必須（固定）
+  const currentCat = document.getElementById('current-category').value; // 代表カテゴリ
+  const rating = Number(document.getElementById('add-rating').value);
+  const name = document.getElementById('add-name').value.trim();
+  const url = document.getElementById('add-url').value.trim();
+  const reason_raw = document.getElementById('add-reason').value.trim();
+  const pickedCat = document.getElementById('add-category').value;
+  const category = pickedCat || currentCat || 'その他';
+  const date_str = new Date().toISOString().slice(0,10);
+
+  if (!title || !rating) {
+    msgEl.textContent = '必須項目（★）を入力してください。';
+    msgEl.className = 'ml-2 text-sm text-red-600';
+    return;
+  }
+
+  const { error } = await supabase.from('recommendations').insert([{
+    title,
+    category,
+    rating,
+    reason_raw,
+    url,
+    name,
+    date_str
+  }]);
+
+  if (error) {
+    console.error(error);
+    msgEl.textContent = '登録に失敗しました。';
+    msgEl.className = 'ml-2 text-sm text-red-600';
+    return;
+  }
+
+  msgEl.textContent = '登録しました！一覧と詳細を更新します…';
+  msgEl.className = 'ml-2 text-sm text-green-700';
+
+  // 入力値を軽くクリア
+  document.getElementById('add-rating').value = '';
+  document.getElementById('add-name').value = '';
+  document.getElementById('add-url').value = '';
+  document.getElementById('add-reason').value = '';
+  document.getElementById('add-category').value = '';
+
+  // 一覧と詳細を再読み込み（平均や件数を即反映）
+  await loadList();
+  await openDetail((title || '').trim().toLowerCase()); // title_keyに相当するキーで再表示
+});
+
+
+  // ====== 初回ロード ======
+  loadList();
+
+  // ====== XSS用の簡易エスケープ ======
+  function escapeHtml(s){ return (s??'').toString().replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));}
+  function escapeAttr(s){ return (s??'').toString().replace(/"/g,'&quot;'); }
+</script>
+</body>
+</html>

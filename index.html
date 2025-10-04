@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>みんなの本紹介</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS v2 -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            sand: {
+              50: '#f7f5f1',
+              100: '#efece5',
+              200: '#e2ddd4',
+              300: '#cfc9bd',
+              500: '#958f85',
+              700: '#5c564d'
+            },
+            moss: {
+              100: '#dfe6dd',
+              400: '#9da98f',
+              500: '#6f7b62',
+              700: '#4b5542'
+            },
+            slategreen: '#3a4a3f'
+          },
+          fontFamily: {
+            heading: ['"Hiragino Sans"', '"Yu Gothic"', 'system-ui', 'sans-serif']
+          },
+          boxShadow: {
+            soft: '0 20px 45px rgba(24, 36, 28, 0.12)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: "Hiragino Sans", "Yu Gothic", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      background: linear-gradient(160deg, #f4f2ec 0%, #f8f7f4 18%, #ebe1d4 100%);
+      color: #1f2933;
+    }
+    .texture-top {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 15% 20%, rgba(157, 169, 143, 0.18), transparent 55%),
+                  radial-gradient(circle at 85% 10%, rgba(206, 192, 173, 0.18), transparent 60%),
+                  radial-gradient(circle at 50% 90%, rgba(159, 174, 150, 0.16), transparent 62%);
+      pointer-events: none;
+      mix-blend-mode: multiply;
+      z-index: 0;
+    }
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 30px 60px rgba(56, 66, 62, 0.15);
+      border: 1px solid rgba(215, 215, 211, 0.4);
+    }
+    .floating-shape {
+      position: absolute;
+      border-radius: 9999px;
+      filter: blur(50px);
+      opacity: 0.35;
+      animation: float 14s ease-in-out infinite;
+      mix-blend-mode: multiply;
+    }
+    .floating-shape:nth-child(1) { inset: 12% auto auto -14%; width: 260px; height: 260px; background: #dfe6dd; }
+    .floating-shape:nth-child(2) { inset: auto -10% 18% auto; width: 320px; height: 320px; background: #e2ddd4; animation-delay: 3s; }
+    .floating-shape:nth-child(3) { inset: 70% auto auto 60%; width: 280px; height: 280px; background: #cbdad3; animation-delay: 6s; }
+    @keyframes float {
+      0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+      50% { transform: translate3d(25px, -30px, 0) scale(1.04); }
+    }
+    .tag-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 10px;
+      border-radius: 9999px;
+      background: rgba(111, 123, 98, 0.12);
+      color: #4b5542;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .star { font-size: 18px; line-height: 1; }
+    .star.filled { color: #d9983b; }
+    .dropdown { position: absolute; z-index: 40; background: white; border: 1px solid #e5e7eb; border-radius: 12px; width: 100%; max-height: 240px; overflow: auto; box-shadow: 0 18px 36px rgba(55, 65, 81, 0.15); }
+    .dropdown-item { padding: 10px 14px; cursor: pointer; font-size: 14px; }
+    .dropdown-item:hover { background: #f3f4f6; }
+    dialog::backdrop { background: rgba(62, 70, 63, 0.45); backdrop-filter: blur(4px); }
+    .modal-card { background: #fdfcf9; }
+    [data-animate] { opacity: 0; transform: translateY(30px) scale(.98); transition: opacity .8s ease, transform .8s cubic-bezier(.19,1,.22,1); }
+    [data-animate].is-visible { opacity: 1; transform: translateY(0) scale(1); }
+    .list-card { transition: transform .5s ease, box-shadow .5s ease; border: 1px solid rgba(205, 200, 191, 0.7); }
+    .list-card:hover { transform: translateY(-6px); box-shadow: 0 22px 40px rgba(52, 64, 52, 0.18); }
+    .list-card::before {
+      content: '';
+      position: absolute;
+      inset: 14px auto 14px 0;
+      width: 6px;
+      border-radius: 9999px;
+      background: linear-gradient(180deg, rgba(111,123,98,0.8), rgba(157,169,143,0.45));
+    }
+    .badge { padding: 2px 8px; border-radius: 9999px; background: rgba(142, 154, 132, 0.18); font-size: 12px; color: #4b5542; }
+    .loader-dot { width: 10px; height: 10px; border-radius: 999px; background: rgba(111, 123, 98, 0.58); animation: pulse 1.2s infinite ease-in-out; }
+    .loader-dot:nth-child(2) { animation-delay: .2s; }
+    .loader-dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes pulse { 0%, 100% { opacity: .3; transform: translateY(0);} 50% { opacity: 1; transform: translateY(-5px);} }
+  </style>
+</head>
+<body>
+  <div class="relative min-h-screen overflow-hidden">
+    <div class="floating-shape"></div>
+    <div class="floating-shape"></div>
+    <div class="floating-shape"></div>
+    <div class="texture-top"></div>
+
+    <div class="relative max-w-6xl mx-auto px-4 sm:px-6 pb-16 pt-10">
+      <header class="mb-12 md:mb-16" data-animate>
+        <div class="md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,340px)] md:gap-10 items-center">
+          <div class="space-y-6">
+            <span class="inline-flex items-center gap-2 rounded-full bg-moss-100 text-moss-700 px-4 py-1 text-xs font-medium uppercase tracking-[0.2em]">Community Picks</span>
+            <h1 class="text-3xl sm:text-4xl md:text-5xl font-heading font-semibold leading-tight text-slategreen drop-shadow-sm">
+              📚 みんなの本紹介（簡易版）
+            </h1>
+            <p class="text-base sm:text-lg text-sand-700 leading-relaxed">
+              投資・マネーに関する良書をお探しの方へ。ログインなしでの登録・比較に対応し、人気の理由や評価を閲覧できます。自身の課題に合う一冊を見つけましょう！
+            </p>
+            <dl class="grid sm:grid-cols-3 gap-3 text-sm text-sand-700">
+              <div class="glass-panel rounded-2xl px-4 py-3 border border-white/60 shadow-soft">
+                <dt class="text-xs uppercase tracking-[0.18em] text-slategreen/70">シンプル登録</dt>
+                <dd class="mt-1 text-base font-semibold text-slategreen">30秒で投稿完了</dd>
+              </div>
+              <div class="glass-panel rounded-2xl px-4 py-3 border border-white/60 shadow-soft">
+                <dt class="text-xs uppercase tracking-[0.18em] text-slategreen/70">みんなの知見</dt>
+                <dd class="mt-1 text-base font-semibold text-slategreen">次の一冊が見つかる</dd>
+              </div>
+              <div class="glass-panel rounded-2xl px-4 py-3 border border-white/60 shadow-soft">
+                <dt class="text-xs uppercase tracking-[0.18em] text-slategreen/70">サクッと貢献</dt>
+                <dd class="mt-1 text-base font-semibold text-slategreen">小さな投稿が大きな助けに</dd>
+              </div>
+            </dl>
+          </div>
+          <div class="mt-10 md:mt-0 relative" aria-hidden="true">
+            <div class="absolute -inset-6 bg-gradient-to-br from-white/80 via-white/40 to-moss-100/70 rounded-3xl blur-xl"></div>
+            <div class="relative glass-panel rounded-3xl px-6 py-8 shadow-soft">
+              <h2 class="text-sm font-medium text-slategreen/80 tracking-[0.18em] uppercase">How to 投稿</h2>
+              <ul class="mt-4 space-y-4 text-sm text-sand-700">
+                <li class="flex gap-3">
+                  <span class="h-9 w-9 flex items-center justify-center rounded-full bg-moss-500/10 text-moss-500 font-semibold">1</span>
+                  <span>タイトル・カテゴリ・おすすめ度を入力。既存の候補は自動でサジェストされます。</span>
+                </li>
+                <li class="flex gap-3">
+                  <span class="h-9 w-9 flex items-center justify-center rounded-full bg-moss-500/10 text-moss-500 font-semibold">2</span>
+                  <span>任意でリンクや推しポイント、ニックネームを添えて、みんなに届けましょう。</span>
+                </li>
+                <li class="flex gap-3">
+                  <span class="h-9 w-9 flex items-center justify-center rounded-full bg-moss-500/10 text-moss-500 font-semibold">3</span>
+                  <span>一覧はリアルタイムで更新。モーダルから詳細を開いて、さらに評価も追加できます。</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- 追加フォーム -->
+        <div class="mb-3 flex justify-end">
+        <button
+            id="toggle-form"
+            class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+            aria-controls="form-section"
+            aria-expanded="false"
+        >
+            ＋ あなたのオススメの本を登録する
+        </button>
+        </div>
+        <section
+        id="form-section"
+        class="overflow-hidden transition-[max-height] duration-300 ease-out max-h-0"
+        >
+            <div class="glass-panel rounded-3xl p-6 sm:p-8 shadow-soft mb-6 md:mb-8">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                <div>
+                <h2 class="text-xl font-semibold text-slategreen">あなたおすすめの本を登録</h2>
+                <p class="text-sm text-sand-700 mt-1">タイトル入力中にサジェストが表示され、重複登録を防ぎます。</p>
+                </div>
+                <span class="tag-chip">ログイン不要</span>
+            </div>
+            <div class="grid sm:grid-cols-2 gap-4 relative">
+                <div class="sm:col-span-2 relative">
+                <label class="block text-sm mb-1 text-slategreen/80">本のタイトル（必須）</label>
+                <input id="inp-title" class="w-full border border-white/70 bg-white/70 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition" placeholder="例）ウォール街のランダム・ウォーカー" />
+                <div id="suggest-box" class="dropdown hidden mt-2"></div>
+                </div>
+
+                <div>
+                <label class="block text-sm mb-1 text-slategreen/80">カテゴリ（必須）</label>
+                <select id="inp-category" class="w-full border border-white/70 bg-white/70 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition">
+                    <option value="">選択してください</option>
+                    <option>株式・インデックス</option>
+                    <option>不動産</option>
+                    <option>FIRE関連</option>
+                    <option>FX</option>
+                    <option>その他</option>
+                </select>
+                </div>
+
+                <div>
+                <label class="block text-sm mb-1 text-slategreen/80">オススメ度 ★（必須）</label>
+                <select id="inp-rating" class="w-full border border-white/70 bg-white/70 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition">
+                    <option value="">選択してください</option>
+                    <option value="1">★1</option>
+                    <option value="2">★2</option>
+                    <option value="3">★3</option>
+                    <option value="4">★4</option>
+                    <option value="5">★5</option>
+                </select>
+                </div>
+
+                <div>
+                <label class="block text-sm mb-1 text-slategreen/80">著者（任意）</label>
+                <input id="inp-author" class="w-full border border-white/70 bg-white/70 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition" placeholder="著者名" />
+                </div>
+
+                <div>
+                <label class="block text-sm mb-1 text-slategreen/80">URL（任意）</label>
+                <input id="inp-url" class="w-full border border-white/70 bg-white/70 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition" placeholder="Amazon等のリンク" />
+                </div>
+
+                <div class="sm:col-span-2">
+                <label class="block text-sm mb-1 text-slategreen/80">おすすめ理由（任意）</label>
+                <textarea id="inp-reason" class="w-full border border-white/70 bg-white/70 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition" rows="3" placeholder="なぜオススメ？"></textarea>
+                </div>
+
+                <div class="sm:col-span-2">
+                <label class="block text-sm mb-1 text-slategreen/80">あなたの名前（任意・表示用）</label>
+                <input id="inp-name" class="w-full border border-white/70 bg-white/70 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition" placeholder="ニックネーム可" />
+                </div>
+
+                <div class="sm:col-span-2 flex flex-wrap items-center gap-4 mt-2">
+                <button id="btn-submit" class="px-6 py-2.5 rounded-xl bg-slategreen text-white font-medium shadow-lg shadow-slategreen/25 hover:shadow-xl hover:translate-y-[-1px] transition-transform duration-300">登録する</button>
+                <span id="form-msg" class="text-sm text-sand-700"></span>
+                </div>
+            </div>
+            <p class="text-xs text-sand-500 mt-4">タイトル入力中に「すでにオススメされているかも？」候補を表示します。</p>
+            </div>
+        </section>
+
+      <!-- フィルタ・ソート -->
+      <section class="mb-6" data-animate>
+        <div class="glass-panel rounded-3xl px-5 py-4 shadow-soft border border-white/50">
+          <div class="flex flex-col lg:flex-row gap-4 lg:items-end">
+            <div class="flex-1 grid sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <label class="flex flex-col gap-2 text-sm text-slategreen/80">
+                <span>カテゴリで絞り込み</span>
+                <select id="filter-category" class="border border-white/70 bg-white/70 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition">
+                  <option value="">すべて</option>
+                  <option>株式・インデックス</option>
+                  <option>不動産</option>
+                  <option>FIRE関連</option>
+                  <option>FX</option>
+                  <option>その他</option>
+                </select>
+              </label>
+              <label class="flex flex-col gap-2 text-sm text-slategreen/80">
+                <span>並び替え</span>
+                <select id="sort-by" class="border border-white/70 bg-white/70 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition">
+                  <option value="score">評価が高い順</option>
+                  <option value="new">登録が新しい順</option>
+                  <option value="count">投稿数が多い順</option>
+                </select>
+              </label>
+              <label class="flex flex-col gap-2 text-sm text-slategreen/80">
+                <span>タイトル検索</span>
+                <input id="search-q" class="border border-white/70 bg-white/70 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition" placeholder="キーワード" />
+              </label>
+            </div>
+            <div class="lg:w-[240px] flex items-center gap-2 text-xs text-slategreen/70">
+              <span class="inline-flex h-2 w-2 rounded-full bg-slategreen/60 animate-pulse"></span>
+              <span>集計ビューを自動更新中</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 一覧 -->
+      <section class="glass-panel rounded-3xl shadow-soft border border-white/60" data-animate>
+        <div class="flex justify-between items-center px-6 pt-6 pb-3 text-xs text-sand-700">
+          <span class="font-medium tracking-[0.16em] uppercase text-slategreen/70">recommended shelf</span>
+          <time id="last-update" class="opacity-70"></time>
+        </div>
+        <div id="list-loader" class="px-6 pb-4 hidden">
+          <div class="flex items-center gap-3 text-sand-700 text-sm">
+            <div class="flex gap-1">
+              <span class="loader-dot"></span>
+              <span class="loader-dot"></span>
+              <span class="loader-dot"></span>
+            </div>
+            <span>最新の投稿を読み込み中…</span>
+          </div>
+        </div>
+        <div id="list" class="space-y-3 px-3 pb-7"></div>
+        <div id="empty" class="px-6 pb-7 text-center text-slategreen/60 hidden">該当データがありません</div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 詳細モーダル -->
+  <dialog id="dlg-detail" class="rounded-3xl p-0 w-11/12 max-w-2xl border border-white/60">
+    <div class="modal-card rounded-3xl overflow-hidden shadow-soft">
+      <div class="p-6 border-b border-sand-200 flex flex-wrap sm:flex-nowrap items-start gap-3">
+        <div class="grow">
+          <h3 id="detail-title" class="text-xl font-semibold text-slategreen"></h3>
+          <div id="detail-meta" class="text-sm text-sand-700 mt-1"></div>
+        </div>
+        <button onclick="closeDetail()" class="px-4 py-2 rounded-xl bg-sand-100 text-slategreen text-sm font-medium hover:bg-sand-200 transition">閉じる</button>
+      </div>
+      <div class="p-6 space-y-6 max-h-[70vh] overflow-auto">
+        <div>
+          <h4 class="font-semibold text-slategreen mb-2">平均オススメ度</h4>
+          <div id="detail-avg" class="flex items-center gap-2"></div>
+        </div>
+        <div>
+          <h4 class="font-semibold text-slategreen mb-2">みんなのおすすめ理由</h4>
+          <ul id="detail-reasons" class="space-y-3"></ul>
+        </div>
+        <div class="text-xs text-sand-600" id="detail-dates"></div>
+        <div class="border-t border-sand-200 pt-4">
+          <h4 class="font-semibold text-slategreen mb-2">この本に評価を追加</h4>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm mb-1 text-slategreen/80">オススメ度（必須）</label>
+              <select id="add-rating" class="w-full border border-sand-200 bg-white rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition">
+                <option value="">選択してください</option>
+                <option value="1">★1</option>
+                <option value="2">★2</option>
+                <option value="3">★3</option>
+                <option value="4">★4</option>
+                <option value="5">★5</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm mb-1 text-slategreen/80">あなたの名前（任意）</label>
+              <input id="add-name" class="w-full border border-sand-200 bg-white rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition" placeholder="ニックネーム可" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1 text-slategreen/80">URL（任意）</label>
+              <input id="add-url" class="w-full border border-sand-200 bg-white rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition" placeholder="Amazon等のリンク" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1 text-slategreen/80">カテゴリ（任意・既定は既存カテゴリ）</label>
+              <select id="add-category" class="w-full border border-sand-200 bg-white rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition">
+                <option value="">（変更しない）</option>
+                <option>株式・インデックス</option>
+                <option>不動産</option>
+                <option>FIRE関連</option>
+                <option>FX</option>
+                <option>その他</option>
+              </select>
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-sm mb-1 text-slategreen/80">おすすめ理由（任意）</label>
+              <textarea id="add-reason" class="w-full border border-sand-200 bg-white rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-moss-400 focus:border-transparent transition" rows="3" placeholder="なぜオススメ？"></textarea>
+            </div>
+            <div class="sm:col-span-2 flex flex-wrap items-center gap-3">
+              <button id="add-submit" class="px-5 py-2.5 rounded-xl bg-slategreen text-white font-medium shadow-lg shadow-slategreen/25 hover:shadow-xl hover:translate-y-[-1px] transition-transform duration-300">この本に評価を追加</button>
+              <span id="add-msg" class="text-sm text-sand-700"></span>
+            </div>
+          </div>
+          <input type="hidden" id="current-title" />
+          <input type="hidden" id="current-category" />
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+<script>
+  // ====== 環境変数（置き換え） ======
+  const SUPABASE_URL = "https://ssqbcwhophlmhcxyrkjx.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcWJjd2hvcGhsbWhjeHlya2p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0OTg1ODksImV4cCI6MjA3NTA3NDU4OX0.RFsUcX-NczrHI9mgaMNHLqtIlCVp-0uthELS6L1Hq_w";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // 便利関数
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const debounce = (fn, ms=300) => {
+    let t; return (...args) => { clearTimeout(t); t=setTimeout(()=>fn(...args), ms); };
+  };
+  const starNode = (n, filled) => {
+    const s=document.createElement('span'); s.textContent='★'; s.className='star'+(filled?' filled':''); return s;
+  };
+  function renderStars(container, score, max=5) {
+    container.innerHTML='';
+    for (let i=1; i<=max; i++) container.appendChild(starNode(i, i<=Math.round(score)));
+    const t=document.createElement('span'); t.className='text-sm text-sand-700 ml-2'; t.textContent = `(${score})`;
+    container.appendChild(t);
+  }
+
+  // ====== サジェスト（重複チェック） ======
+  const titleInput = document.getElementById('inp-title');
+  const suggestBox = document.getElementById('suggest-box');
+
+  async function fetchSuggests(q) {
+    if (!q || q.trim().length < 2) { suggestBox.classList.add('hidden'); suggestBox.innerHTML=''; return; }
+    const { data, error } = await supabase.rpc('suggest_similar_titles', { q, limit_count: 8 });
+    if (error) { console.warn(error); suggestBox.classList.add('hidden'); return; }
+
+    if (!data || data.length === 0) { suggestBox.classList.add('hidden'); suggestBox.innerHTML=''; return; }
+
+    suggestBox.innerHTML = '<div class="px-4 py-2 text-xs text-sand-600">すでにオススメされているかも？</div>'
+      + data.map(d => `<div class="dropdown-item" data-title="${d.title}">${d.title} <span class="text-sand-500">/ ${d.author}</span></div>`).join('');
+    suggestBox.classList.remove('hidden');
+  }
+  titleInput.addEventListener('input', debounce(e => fetchSuggests(e.target.value), 250));
+  suggestBox.addEventListener('click', (e) => {
+    const item = e.target.closest('.dropdown-item');
+    if (!item) return;
+    titleInput.value = item.dataset.title;
+    suggestBox.classList.add('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (!suggestBox.contains(e.target) && e.target !== titleInput) suggestBox.classList.add('hidden');
+  });
+
+  // ====== 登録 ======
+  const msg = document.getElementById('form-msg');
+  document.getElementById('btn-submit').addEventListener('click', async () => {
+    msg.textContent = '';
+    const title = document.getElementById('inp-title').value.trim();
+    const category = document.getElementById('inp-category').value;
+    const rating = Number(document.getElementById('inp-rating').value);
+    const author_raw = document.getElementById('inp-author').value.trim();
+    const url = document.getElementById('inp-url').value.trim();
+    const reason_raw = document.getElementById('inp-reason').value.trim();
+    const name = document.getElementById('inp-name').value.trim();
+    const date_str = new Date().toISOString().slice(0,10);
+
+    if (!title || !category || !rating) {
+      msg.textContent = '必須項目（タイトル／カテゴリ／★）を入力してください。';
+      msg.className = 'text-sm text-red-600';
+      return;
+    }
+
+    // 近似タイトルが既にある場合、軽く注意喚起
+    const { data: sugg } = await supabase.rpc('suggest_similar_titles', { q: title, limit_count: 1 });
+    if (sugg && sugg.length) {
+      const s = sugg[0];
+      if (s.levenshtein_dist <= 3 || s.similarity_score >= 0.35) {
+        if (!confirm(`「${s.title}」が既にあります。追加しますか？`)) return;
+      }
+    }
+
+    const { error } = await supabase.from('recommendations').insert([{
+      title, category, rating, author_raw, url, reason_raw, name, date_str
+    }]);
+    if (error) {
+      console.error(error);
+      msg.textContent = '登録に失敗しました。';
+      msg.className = 'text-sm text-red-600';
+    } else {
+      msg.textContent = '登録しました！一覧を更新します…';
+      msg.className = 'text-sm text-moss-500';
+      await sleep(300);
+      resetForm();
+      await loadList();  // 再読込
+      // 折り畳みを閉じて一覧へ
+      if (typeof setOpen === 'function') {
+         setOpen(false);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  });
+
+  function resetForm() {
+    ['inp-title','inp-category','inp-rating','inp-author','inp-url','inp-reason','inp-name'].forEach(id=>{
+      const el=document.getElementById(id);
+      if (el.tagName==='SELECT') el.value='';
+      else el.value='';
+    });
+  }
+
+  // ====== 一覧の読み込み ======
+  const listEl = document.getElementById('list');
+  const emptyEl = document.getElementById('empty');
+  const loaderEl = document.getElementById('list-loader');
+  const lastUpdateEl = document.getElementById('last-update');
+
+  async function loadList() {
+    loaderEl.classList.remove('hidden');
+    listEl.classList.add('opacity-60');
+    const filterCat = document.getElementById('filter-category').value;
+    const sortBy = document.getElementById('sort-by').value;
+    const q = document.getElementById('search-q').value.trim();
+
+    let qb = supabase.from('book_stats').select('*');
+
+    if (filterCat) qb = qb.eq('category', filterCat);
+    if (q) qb = qb.ilike('title', `%${q}%`);
+
+    // 並び替え
+    if (sortBy === 'score') qb = qb.order('avg_rating', { ascending: false }).order('posts_count', { ascending: false });
+    if (sortBy === 'count') qb = qb.order('posts_count', { ascending: false }).order('avg_rating', { ascending: false });
+    if (sortBy === 'new')   qb = qb.order('last_post_at', { ascending: false });
+
+    const { data, error } = await qb;
+    loaderEl.classList.add('hidden');
+    listEl.classList.remove('opacity-60');
+
+    if (error) { console.error(error); listEl.innerHTML=''; emptyEl.classList.remove('hidden'); return; }
+
+    if (!data || data.length===0) { listEl.innerHTML=''; emptyEl.classList.remove('hidden'); return; }
+    emptyEl.classList.add('hidden');
+
+    listEl.innerHTML = data.map(b => {
+      const avgRounded = Math.round(b.avg_rating);
+      const dateStr = b.last_post_at ? new Date(b.last_post_at).toLocaleDateString() : '-';
+      const author = b.author || '不明';
+      return `
+      <article class="relative list-card rounded-2xl bg-white/82 px-6 py-5 overflow-hidden" data-title_key="${b.title_key}">
+        <div class="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-8">
+          <div class="flex-1 space-y-3">
+            <div class="flex flex-wrap items-center gap-3">
+              <h3 class="text-lg font-semibold text-slategreen">${escapeHtml(b.title)}</h3>
+              <span class="badge">${escapeHtml(b.category || 'その他')}</span>
+            </div>
+            <p class="text-sm text-sand-700">著者：${escapeHtml(author)}</p>
+            <div class="flex flex-wrap items-center gap-3 text-sm text-sand-700">
+              <div class="flex items-center gap-1">
+                ${['','','','',''].map((_,i)=>`<span class=\"star ${i<avgRounded?'filled':''}\">★</span>`).join('')}
+              </div>
+              <span>平均${b.avg_rating}</span>
+              <span class="inline-flex items-center gap-1 text-xs text-slategreen/70 px-2 py-1 rounded-full bg-moss-500/10">投稿 ${b.posts_count}</span>
+            </div>
+          </div>
+          <div class="text-xs text-sand-600 lg:text-right lg:min-w-[120px]">最終更新: ${dateStr}</div>
+        </div>
+      </article>`;
+    }).join('');
+
+    const newest = data[0]?.last_post_at;
+    if (newest) {
+      const dt = new Date(newest);
+      lastUpdateEl.textContent = `最終更新: ${dt.toLocaleDateString()}`;
+    } else {
+      lastUpdateEl.textContent = '';
+    }
+
+    revealOnScroll();
+  }
+
+  listEl.addEventListener('click', async (e) => {
+    const row = e.target.closest('[data-title_key]');
+    if (!row) return;
+    const key = row.getAttribute('data-title_key');
+    await openDetail(key);
+  });
+
+  // ====== 詳細（モーダル） ======
+  async function openDetail(title_key) {
+    let { data: books } = await supabase.from('book_stats').select('*').eq('title_key', title_key).limit(1);
+    const b = books && books[0];
+    if (!b) return;
+
+    document.getElementById('detail-title').textContent = b.title;
+    document.getElementById('detail-meta').textContent = `著者：${b.author} ／ カテゴリ：${b.category || 'その他'}`;
+
+    const avgWrap = document.getElementById('detail-avg');
+    renderStars(avgWrap, b.avg_rating);
+
+    const { data: recs } = await supabase
+      .from('recommendations')
+      .select('rating, reason_raw, name, url, date_str')
+      .ilike('title', b.title);
+
+    const ul = document.getElementById('detail-reasons');
+    ul.innerHTML = (recs||[]).map(r => {
+      const link = r.url ? `<a class="text-moss-500 underline underline-offset-4" href="${escapeAttr(r.url)}" target="_blank" rel="noopener">リンク</a>` : '';
+      const who = r.name ? `（by ${escapeHtml(r.name)}）` : '';
+      return `<li class="p-4 rounded-2xl border border-sand-200 bg-white/90">
+        <div class="mb-1">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
+        <div class="text-sm text-slategreen whitespace-pre-wrap">${escapeHtml(r.reason_raw || '（理由なし）')}</div>
+        <div class="mt-2 text-xs text-sand-600 flex flex-wrap items-center gap-3">
+          <span>${escapeHtml(r.date_str || '')}</span>
+          ${link}
+          <span>${who}</span>
+        </div>
+      </li>`;
+    }).join('');
+
+    const first = b.first_post_at ? new Date(b.first_post_at).toLocaleDateString() : '-';
+    const last  = b.last_post_at ? new Date(b.last_post_at).toLocaleDateString() : '-';
+    document.getElementById('detail-dates').textContent = `登録日: ${first} ／ 最終更新日: ${last}`;
+    document.getElementById('current-title').value = b.title;
+    document.getElementById('current-category').value = b.category || '';
+    const addCatSel = document.getElementById('add-category');
+    if (addCatSel) addCatSel.value = '';
+
+    document.getElementById('dlg-detail').showModal();
+  }
+  function closeDetail(){ document.getElementById('dlg-detail').close(); }
+
+  // ====== フィルタ・ソート・検索イベント ======
+  document.getElementById('filter-category').addEventListener('change', loadList);
+  document.getElementById('sort-by').addEventListener('change', loadList);
+  document.getElementById('search-q').addEventListener('input', debounce(loadList, 250));
+
+  document.getElementById('add-submit').addEventListener('click', async () => {
+    const msgEl = document.getElementById('add-msg');
+    msgEl.textContent = '';
+    msgEl.className = 'text-sm text-sand-700';
+
+    const title = document.getElementById('current-title').value;
+    const currentCat = document.getElementById('current-category').value;
+    const rating = Number(document.getElementById('add-rating').value);
+    const name = document.getElementById('add-name').value.trim();
+    const url = document.getElementById('add-url').value.trim();
+    const reason_raw = document.getElementById('add-reason').value.trim();
+    const pickedCat = document.getElementById('add-category').value;
+    const category = pickedCat || currentCat || 'その他';
+    const date_str = new Date().toISOString().slice(0,10);
+
+    if (!title || !rating) {
+      msgEl.textContent = '必須項目（★）を入力してください。';
+      msgEl.className = 'text-sm text-red-600';
+      return;
+    }
+
+    const { error } = await supabase.from('recommendations').insert([{
+      title,
+      category,
+      rating,
+      reason_raw,
+      url,
+      name,
+      date_str
+    }]);
+
+    if (error) {
+      console.error(error);
+      msgEl.textContent = '登録に失敗しました。';
+      msgEl.className = 'text-sm text-red-600';
+      return;
+    }
+
+    msgEl.textContent = '登録しました！一覧と詳細を更新します…';
+    msgEl.className = 'text-sm text-moss-500';
+
+    document.getElementById('add-rating').value = '';
+    document.getElementById('add-name').value = '';
+    document.getElementById('add-url').value = '';
+    document.getElementById('add-reason').value = '';
+    document.getElementById('add-category').value = '';
+
+    await loadList();
+    await openDetail((title || '').trim().toLowerCase());
+  });
+
+  // ====== 初回ロード ======
+  loadList();
+
+  // ====== XSS用の簡易エスケープ ======
+  function escapeHtml(s){ return (s??'').toString().replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));}
+  function escapeAttr(s){ return (s??'').toString().replace(/"/g,'&quot;'); }
+
+  // ====== スクロールアニメーション ======
+  let observerInstance;
+  function revealOnScroll(){
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      document.querySelectorAll('[data-animate]').forEach(el => el.classList.add('is-visible'));
+      return;
+    }
+    if (!observerInstance) {
+      observerInstance = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observerInstance.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.18, rootMargin: '0px 0px -40px 0px' });
+    }
+    document.querySelectorAll('[data-animate]').forEach(el => {
+      if (!el.classList.contains('is-visible')) observerInstance.observe(el);
+    });
+  }
+  revealOnScroll();
+  // ====== アコーディオン開閉 ======
+    const formSection = document.getElementById('form-section');
+    const toggleBtn   = document.getElementById('toggle-form');
+
+    // max-height を動的に当ててスムーズに開閉
+    function setMaxHeight(open) {
+    if (open) {
+        formSection.classList.remove('max-h-0');
+        formSection.style.maxHeight = formSection.scrollHeight + 'px';
+    } else {
+        formSection.style.maxHeight = formSection.scrollHeight + 'px'; // 直前高さを一旦セット
+        // 次フレームで0にするとアニメーション
+        requestAnimationFrame(() => {
+        formSection.classList.add('max-h-0');
+        formSection.style.maxHeight = '0px';
+        });
+    }
+    }
+
+    // 開く/閉じる本体
+    function setOpen(open, {focus=false} = {}) {
+    toggleBtn.setAttribute('aria-expanded', String(open));
+    setMaxHeight(open);
+    localStorage.setItem(STORAGE_KEY, open ? '1' : '0');
+    if (open && focus) {
+        // 初回開いたらタイトルにフォーカス
+        const t = document.getElementById('inp-title');
+        if (t) t.focus();
+    }
+    }
+
+    // トグル
+    toggleBtn.addEventListener('click', () => {
+    const nowOpen = toggleBtn.getAttribute('aria-expanded') === 'true';
+    setOpen(!nowOpen, {focus: !nowOpen});
+    });
+
+    // 初期状態：URLクエリ/ハッシュ or 保存状態で決定
+    (function initAccordion(){
+    let shouldOpen = false;
+
+    // 1) URL で強制表示（例: ?add=1 もしくは #add）
+    const params = new URLSearchParams(location.search);
+    if (params.get('add') === '1' || location.hash === '#add') {
+        shouldOpen = true;
+    } else {
+        // 2) 保存した状態を復元（デフォルトは閉）
+        shouldOpen = localStorage.getItem(STORAGE_KEY) === '1';
+    }
+
+    // 3) 初期セット（アニメなしで確定 → 次フレームでmax-height反映）
+    formSection.style.transition = 'none';
+    setOpen(shouldOpen);
+    requestAnimationFrame(() => {
+        formSection.style.transition = ''; // アニメ復帰
+        // 開いている場合、高さを再計算（レスポンシブで中身高さが変わることがあるため）
+        if (shouldOpen) setMaxHeight(true);
+    });
+    })();
+
+    // ウィンドウリサイズでmax-height再計算（開いているときだけ）
+    window.addEventListener('resize', () => {
+    if (toggleBtn.getAttribute('aria-expanded') === 'true') {
+        formSection.style.maxHeight = formSection.scrollHeight + 'px';
+    }
+    });
+
+    // Escで閉じる（フォーム入力中でも素早く閉じたい人向け）
+    document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && toggleBtn.getAttribute('aria-expanded') === 'true') {
+        setOpen(false);
+    }
+    });
+
+</script>
+</body>
+</html>
