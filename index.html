@@ -111,6 +111,9 @@
     .loader-dot:nth-child(2) { animation-delay: .2s; }
     .loader-dot:nth-child(3) { animation-delay: .4s; }
     @keyframes pulse { 0%, 100% { opacity: .3; transform: translateY(0);} 50% { opacity: 1; transform: translateY(-5px);} }
+    @media (max-width: 768px), (pointer: coarse) {
+      [data-animate]{ opacity:1 !important; transform:none !important; }
+    }
   </style>
 </head>
 <body>
