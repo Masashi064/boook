@@ -385,9 +385,10 @@
 
 <script>
   // ====== 環境変数（置き換え） ======
+  const STORAGE_KEY = 'boook:add-form-open';
   const SUPABASE_URL = "https://ssqbcwhophlmhcxyrkjx.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcWJjd2hvcGhsbWhjeHlya2p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0OTg1ODksImV4cCI6MjA3NTA3NDU4OX0.RFsUcX-NczrHI9mgaMNHLqtIlCVp-0uthELS6L1Hq_w";
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const SUPABASE_ANON_KEY = "sb_publishable_4Xg82kTpgbVY4hwsUFF25g_YmDpGILy";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // 便利関数
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -410,7 +411,7 @@
 
   async function fetchSuggests(q) {
     if (!q || q.trim().length < 2) { suggestBox.classList.add('hidden'); suggestBox.innerHTML=''; return; }
-    const { data, error } = await supabase.rpc('suggest_similar_titles', { q, limit_count: 8 });
+    const { data, error } = await sb.rpc('suggest_similar_titles', { q, limit_count: 8 });
     if (error) { console.warn(error); suggestBox.classList.add('hidden'); return; }
 
     if (!data || data.length === 0) { suggestBox.classList.add('hidden'); suggestBox.innerHTML=''; return; }
@@ -450,7 +451,7 @@
     }
 
     // 近似タイトルが既にある場合、軽く注意喚起
-    const { data: sugg } = await supabase.rpc('suggest_similar_titles', { q: title, limit_count: 1 });
+    const { data: sugg } = await sb.rpc('suggest_similar_titles', { q: title, limit_count: 1 });
     if (sugg && sugg.length) {
       const s = sugg[0];
       if (s.levenshtein_dist <= 3 || s.similarity_score >= 0.35) {
@@ -458,7 +459,7 @@
       }
     }
 
-    const { error } = await supabase.from('recommendations').insert([{
+    const { error } = await sb.from('recommendations').insert([{
       title, category, rating, author_raw, url, reason_raw, name, date_str
     }]);
     if (error) {
@@ -500,7 +501,7 @@
     const sortBy = document.getElementById('sort-by').value;
     const q = document.getElementById('search-q').value.trim();
 
-    let qb = supabase.from('book_stats').select('*');
+    let qb = sb.from('book_stats').select('*');
 
     if (filterCat) qb = qb.eq('category', filterCat);
     if (q) qb = qb.ilike('title', `%${q}%`);
@@ -565,7 +566,7 @@
 
   // ====== 詳細（モーダル） ======
   async function openDetail(title_key) {
-    let { data: books } = await supabase.from('book_stats').select('*').eq('title_key', title_key).limit(1);
+    let { data: books } = await sb.from('book_stats').select('*').eq('title_key', title_key).limit(1);
     const b = books && books[0];
     if (!b) return;
 
@@ -575,7 +576,7 @@
     const avgWrap = document.getElementById('detail-avg');
     renderStars(avgWrap, b.avg_rating);
 
-    const { data: recs } = await supabase
+    const { data: recs } = await sb
       .from('recommendations')
       .select('rating, reason_raw, name, url, date_str')
       .ilike('title', b.title);
@@ -633,7 +634,7 @@
       return;
     }
 
-    const { error } = await supabase.from('recommendations').insert([{
+    const { error } = await sb.from('recommendations').insert([{
       title,
       category,
       rating,
